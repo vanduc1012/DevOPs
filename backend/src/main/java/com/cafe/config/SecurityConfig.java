@@ -35,10 +35,13 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/").permitAll()                  // mở public trang chủ
-                .requestMatchers("/api/auth/**").permitAll()
+                // Public endpoints
+                .requestMatchers("/", "/index", "/home").permitAll()   // Mở trang chủ
+                .requestMatchers("/api/auth/**").permitAll()          // API đăng nhập/đăng ký
                 .requestMatchers(HttpMethod.GET, "/api/menu/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/tables/**").permitAll()
+
+                // Admin-only endpoints
                 .requestMatchers("/api/reports/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/menu/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/menu/**").hasRole("ADMIN")
@@ -47,9 +50,13 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/tables/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PATCH, "/api/tables/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/tables/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/orders/**").hasRole("ADMIN")
+
+                // Authenticated endpoints
                 .requestMatchers(HttpMethod.GET, "/api/orders/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/orders/**").authenticated()
-                .requestMatchers(HttpMethod.PATCH, "/api/orders/**").hasRole("ADMIN")
+
+                // Các request còn lại
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session
@@ -63,7 +70,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+        configuration.setAllowedOriginPatterns(Arrays.asList("*")); // Cho phép tất cả origin
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
