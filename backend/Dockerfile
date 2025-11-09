@@ -4,14 +4,15 @@ FROM eclipse-temurin:17-jdk-alpine
 # Thư mục làm việc
 WORKDIR /app
 
-# Copy file Maven build
+# Copy file pom và source code
 COPY pom.xml .
 COPY src ./src
-COPY mvnw .
-COPY .mvn .mvn
+
+# Cài Maven trong container nếu chưa có
+RUN apk add --no-cache maven
 
 # Build ứng dụng
-RUN ./mvnw clean package -DskipTests || mvn clean package -DskipTests
+RUN mvn clean package -DskipTests
 
 # Expose port
 EXPOSE 8080
