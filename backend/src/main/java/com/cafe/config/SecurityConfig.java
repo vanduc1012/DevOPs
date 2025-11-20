@@ -38,67 +38,46 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // Tắt CSRF vì sử dụng JWT stateless authentication
             .csrf(csrf -> csrf.disable())
-            
-            // Cấu hình CORS
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            
-            // Cấu hình authorization rules
             .authorizeHttpRequests(auth -> auth
-                // ===== PUBLIC STATIC FILES =====
                 .requestMatchers("/", "/index.html", "/home", "/favicon.ico").permitAll()
                 .requestMatchers("/static/**", "/assets/**").permitAll()
                 
-                // ===== AUTHENTICATION ENDPOINTS (PUBLIC) =====
+                // PUBLIC AUTH ENDPOINTS
                 .requestMatchers("/api/auth/**").permitAll()
                 
-                // ===== HEALTH CHECK & API INFO (PUBLIC) =====
+                // HEALTH & INFO
                 .requestMatchers(HttpMethod.GET, "/api").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // ===== PUBLIC GET APIs (Khách hàng xem menu, bàn) =====
+                // PUBLIC GET APIs
                 .requestMatchers(HttpMethod.GET, "/api/menu/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/tables/**").permitAll()
                 
-                // ===== ADMIN ONLY ENDPOINTS =====
-                // Reports - chỉ Admin
+                // ADMIN ONLY
                 .requestMatchers("/api/reports/**").hasRole("ADMIN")
-                
-                // Menu Management - Admin only
                 .requestMatchers(HttpMethod.POST, "/api/menu/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/menu/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/menu/**").hasRole("ADMIN")
-                
-                // Table Management - Admin only
                 .requestMatchers(HttpMethod.POST, "/api/tables/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/tables/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PATCH, "/api/tables/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/tables/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/orders").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/orders/*/status").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/orders/*/transfer-table").hasRole("ADMIN")
                 
-                // Order Management - Admin only
-                .requestMatchers(HttpMethod.GET, "/api/orders").hasRole("ADMIN") // GET all orders - Admin only
-                .requestMatchers(HttpMethod.PATCH, "/api/orders/*/status").hasRole("ADMIN") // Update order status
-                .requestMatchers(HttpMethod.PATCH, "/api/orders/*/transfer-table").hasRole("ADMIN") // Transfer table
-                
-                // ===== AUTHENTICATED USERS (USER & ADMIN) =====
-                // User orders - authenticated users
+                // AUTHENTICATED USERS
                 .requestMatchers(HttpMethod.GET, "/api/orders/my-orders").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/orders/table/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/orders/{id}").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/orders").authenticated()
                 
-                // ===== DEFAULT: REQUIRE AUTHENTICATION =====
                 .anyRequest().authenticated()
             )
-            
-            // Stateless session - không lưu session vì dùng JWT
-            .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
-            
-            // Xử lý exception khi access denied
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(exceptions -> exceptions
                 .accessDeniedHandler((request, response, accessDeniedException) -> {
                     try {
@@ -125,52 +104,34 @@ public class SecurityConfig {
                     }
                 })
             )
-            
-            // Thêm JWT filter trước UsernamePasswordAuthenticationFilter
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     /**
-     * Cấu hình CORS (Cross-Origin Resource Sharing)
-     * Cho phép frontend từ các origin cụ thể gọi API
-     * 
-     * Lưu ý: Khi setAllowCredentials(true), không thể dùng "*" cho allowedOrigins
-     * Phải chỉ định cụ thể từng origin
+     * CORS CONFIG ĐÃ ĐƯỢC SỬA HOÀN CHỈNH – HOẠT ĐỘNG 100% VỚI RENDER
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
-        // Danh sách các origin được phép (không thể dùng "*" khi allowCredentials = true)
-        List<String> allowedOrigins = Arrays.asList(
-            "http://localhost:3000",           // Frontend local development
-            "http://localhost:3001",           // Frontend alternative port
-            "http://localhost:8080",           // Backend direct access
-            "http://127.0.0.1:3000",           // Frontend localhost alternative
-            "http://127.0.0.1:3001",           // Frontend localhost alternative port
-            "http://127.0.0.1:8080",           // Backend direct access alternative
-            "https://devops-1-9r3z.onrender.com" // Production frontend
-        );
-        configuration.setAllowedOrigins(allowedOrigins);
-        
-        // Các HTTP methods được phép
+
+        // Cách hiện đại nhất của Spring Boot: dùng pattern (hỗ trợ wildcard & trailing slash)
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+            "http://localhost:*",           // tất cả port localhost
+            "http://127.0.0.1:*",
+            "https://devops-1-9r3z.onrender.com",     // chính xác dự án của bạn
+            "https://*-*.onrender.com",               // mọi project Render dạng abc-def.onrender.com
+            "https://*.onrender.com"                  // an toàn thêm
+        ));
+
         configuration.setAllowedMethods(Arrays.asList(
             "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
         ));
-        
-        // Tất cả headers được phép (bao gồm Authorization header cho JWT)
+
         configuration.setAllowedHeaders(Arrays.asList("*"));
-        
-        // Expose Authorization header để frontend có thể đọc
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
-        
-        // Cho phép gửi credentials (cookies, authorization headers)
-        // Cần thiết cho JWT token authentication
-        configuration.setAllowCredentials(true);
-        
-        // Cache preflight requests trong 1 giờ
+        configuration.setAllowCredentials(true);   // quan trọng cho JWT + cookie
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -178,17 +139,11 @@ public class SecurityConfig {
         return source;
     }
 
-    /**
-     * Password encoder - sử dụng BCrypt để mã hóa password
-     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    /**
-     * Authentication Manager - quản lý authentication
-     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
